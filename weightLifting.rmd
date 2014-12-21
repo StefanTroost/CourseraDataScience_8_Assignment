@@ -1,0 +1,94 @@
+---
+title: "Lifting weights"
+author: "Stefan Troost"
+date: "Saturday, December 20, 2014"
+output: html_document
+---
+
+### SYNOPSIS
+In the sports science field of qualitative activity recognition, a possible way to determine the quality of an activity, in this case the lifting of dumbbells, is to use on-body sensing. Research has been carried out with a number of sensors attached to the human body. Actually 3 sensors were attached to the body: one in a belt around the waiste, one on the forearm and one on the arm. A fourth sensor was attached to the dumbbell itself, see the picture below.  
+![sensors](sensors.png)  
+In this project, the goal is to use the data from the accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict whether or not they performed the activity in the correct way. The participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways A, B, C, D and E. The 6 participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+The final goal of this project is whether to judge if we can correctly predict the classes by just using the sensor data, on a testset of 20 observations. Looking at the results of the different models that have been tried we estimate that we will be able to predict the execution class correctly in approximately 56% of the cases.
+
+
+### DATA
+As a first step we just read the data as is, both the training and testing data.
+```{r, warning=FALSE, message=FALSE}
+trainingData <- read.csv("D:/Stefan/Cursus/Specialization Data Science/8 Practical Machine Learning/Assignment/pml-training.csv")
+testingData <- read.csv("D:/Stefan/Cursus/Specialization Data Science/8 Practical Machine Learning/Assignment/pml-testing.csv")
+
+summary(trainingData)
+```
+
+In total, there are 160 variables, of which the last variable "classe" represents the class of execution (see synopsis), our variable to predict. If we take a look at the other 159, potentially predicting, variables, it can be easily noticed that quite a large number of them have very few valuable observation values. Many variables have a lot of NA or blank values. If we look at the testing data set, we can distinguish 100 variables that only have NA values.  
+
+### PRE-PROCESSING
+we want to predict the classe of the lifting exercise with the use of the sensor data and will therefore leave out the first 7 non-sensor variables ("X", "user _ name", "raw _ timestamp _ part _ 1", "raw _ timestamp _ part _ 2", "cvtd _ timestamp", "new _ window" and "num _ window"). Furthermore we want to leave out the variables with only NA values as they do not have any distinguishable values to use for prediction.  
+
+```{r, warning=FALSE, message=FALSE}
+trainingData <- trainingData[,-c(1,2,3,4,5,6,7)]
+testingData <- testingData[,-c(1,2,3,4,5,6,7)]
+
+columnsToBeRemoved <- function(data) {
+  remove <- NULL
+  for (col in 1:dim(data)[2]) {
+      if (all(is.na(data[,col]))) {
+        remove <- c(remove, col)
+      }
+  }
+  return(remove)
+}
+
+trainingData <- trainingData[,-columnsToBeRemoved(testingData)]
+testingData <- testingData[,-columnsToBeRemoved(testingData)]
+```
+
+
+### DEFINITION OF A TRAINING AND TESTING SET
+As we want to apply our model to the testing data set, we need to get an estimate of the out of sample error first. Therefore we will split the training data set into a training part and a validation part, using the createDataPartition function of the caret package. The validation part will be used to estimate the "out of sample" error, in order to give an estimate of the error we can expect on the testing set of 20 observations. 
+```{r, warning=FALSE, message=FALSE}
+library("caret")
+inTrain = createDataPartition(trainingData$classe, p = 0.8, list=FALSE)
+validationData <- trainingData[-inTrain,]
+trainingData <- trainingData[inTrain,]
+```
+
+
+### MODELING WITH DECISION TREES - 1 -
+We are dealing with a classification problem here so the choice for a decision tree model seems reasonable. The first we try is a standard decision tree using all predictor variables. This model gives us a tree with a depth of 5 that seems to reasonably well predict class A and E but a little less so class B and C. Furthermore class D is never predicted while occurring in 16% of the cases in reality. The overall accuracy of this model is almost 50%.
+
+```{r, warning=FALSE, message=FALSE}
+library("rpart")
+# Set a seed for reproducability purposes 
+set.seed(12345)
+# Fit a random forest predictor relating the factor variable classe to the remaining variables
+modFit1 <- train(classe ~ ., method="rpart", data=trainingData)
+library("rattle")
+fancyRpartPlot(modFit1$finalModel)
+#varImp(modFit1)
+prediction1 <- predict(modFit1, newdata=validationData)
+confusionMatrix(prediction1, validationData$classe)
+```
+
+
+### MODELING WITH DECISION TREES - 2 - 
+In order to see whether it is possible to predict class D as well we try a little more depth in the next decision tree (6 instead of 5). We see that indeed class D is now predicted as well and the overall accuracy of the model has improved to approximately 56%. However we see that the model still tends to predict class A more often than should be.  
+```{r, warning=FALSE, message=FALSE}
+# Set a seed for reproducability purposes 
+set.seed(23456)
+modFit2 <- train(classe ~ ., method="rpart2", maxdepth = 6, data=trainingData)
+library("rattle")
+fancyRpartPlot(modFit2$finalModel)
+#varImp(modFit2)
+prediction2 <- predict(modFit2, newdata=validationData)
+confusionMatrix(prediction2, validationData$classe)
+```
+
+
+### Predictions for the testing data set
+For this project also a random forest was run, but the processing time was too long to get the results in time to include in this document. Therefore we finally produce prediction results for the testing data using our second and improved model. You will find the results of the prediction below.
+```{r, warning=FALSE, message=FALSE}
+testingPrediction <- predict(modFit2, newdata=testingData)
+print(testingPrediction)
+```
